@@ -2,7 +2,7 @@
 name = "advent_of_code"
 version = "0.0.1"
 authors = ["Marc Jovani"]
-edition = "2023"
+edition = "2021"
 default-run = "advent_of_code"
 
 [lib]
