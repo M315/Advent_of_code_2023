@@ -81,43 +81,6 @@ fn valid_path(curr_pipe: char, next_pipe: char, dir: Dir) -> bool {
     }
 }
 
-fn bfs_count(map: Vec<Vec<char>>) -> u32 {
-    let mut count: u32 = 0; 
-    let mut curr: Vec<(usize, usize)> = vec![get_start(&map).unwrap()];
-    let mut visited: Vec<Vec<bool>> = vec![vec![false; map[0].len()]; map.len()];
-    
-    while !curr.is_empty() {
-        let set: HashSet<u64> = curr.iter()
-            .map(|&(i, j)| i as u64 * (map.len() as u64 + 1) + j as u64)
-            .collect();
-        if set.len() != curr.len() {
-            break;
-        }
-
-        count += 1;
-
-        let mut next_nodes: Vec<(usize, usize)> = Vec::new();
-        for (i, j) in curr {
-            visited[i][j] = true;
-            if i > 0 && !visited[i - 1][j] && valid_path(map[i][j], map[i - 1][j], Dir::Up) {
-                next_nodes.push((i - 1, j));
-            }
-            if j > 0 && !visited[i][j - 1] && valid_path(map[i][j], map[i][j - 1], Dir::Left) {
-                next_nodes.push((i, j - 1));
-            }
-            if i < map.len() - 1 && !visited[i + 1][j] && valid_path(map[i][j], map[i + 1][j], Dir::Down) {
-                next_nodes.push((i + 1, j));
-            }
-            if j < map[0].len() - 1 && !visited[i][j + 1] && valid_path(map[i][j], map[i][j + 1], Dir::Right) {
-                next_nodes.push((i, j + 1));
-            }
-        }
-        curr = next_nodes.to_vec();
-    }
-
-    count
-}
-
 fn bfs(map: Vec<Vec<char>>) -> Vec<Vec<char>> {
     let start: (usize, usize) = get_start(&map).unwrap();
     let mut curr: Vec<(usize, usize)> = vec![start];
@@ -200,7 +163,10 @@ fn is_interior(i: usize, j: usize, map: &Vec<Vec<char>>) -> bool {
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
-    Some(bfs_count(input.lines().map(|line| line.chars().collect()).collect()))
+    //Some(bfs_count(input.lines().map(|line| line.chars().collect()).collect()))
+    let map = bfs(input.lines().map(|line| line.chars().collect()).collect());
+    Some(map.into_iter()
+        .fold(0, |acc, line| acc + line.iter().filter(|&c| *c != ' ').count() as u32) / 2)
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
