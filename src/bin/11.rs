@@ -1,12 +1,14 @@
 advent_of_code::solution!(11);
 
-fn extend_space(map: Vec<Vec<char>>, extra_space: usize) -> Vec<Vec<char>> {
-    let mut extended_map: Vec<Vec<char>> = Vec::new();
+fn extend_space(galaxies: &mut Vec<(usize, usize)>, map: Vec<Vec<char>>, extra_space: usize) {
     // Extend rows
-    for row in &map {
-        extended_map.push(row.to_vec());
+    let mut extra_rows: usize = 0;
+    for (i, row) in map.iter().enumerate() {
         if row.iter().filter(|&c| *c != '.').count() == 0 {
-            extended_map.push(row.to_vec());
+            for galaxy in galaxies.iter_mut() {
+                if galaxy.0 > i + extra_rows { galaxy.0 += extra_space - 1; }
+            }
+            extra_rows += extra_space - 1;
         }
     }
     // Extend columns
@@ -15,18 +17,16 @@ fn extend_space(map: Vec<Vec<char>>, extra_space: usize) -> Vec<Vec<char>> {
         let mut empty: bool = true;
         for i in 0..map.len() { empty &= map[i][j] == '.'; }
         if empty {
-            for i in 0..extended_map.len() {
-                extended_map[i].insert(j + extra_columns, '.');
+            for galaxy in galaxies.iter_mut() {
+                if galaxy.1 > j + extra_columns { galaxy.1 += extra_space - 1; }
             }
-            extra_columns += 1;
+            extra_columns += extra_space - 1;
         }
     }
-    extended_map
 }
 
-pub fn part_one(input: &str) -> Option<u32> {
-    let mut map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
-    map = extend_space(map, 2);
+pub fn part_one(input: &str) -> Option<u64> {
+    let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
     let mut galaxies: Vec<(usize, usize)> = Vec::new();
     for i in 0..map.len() {
         for j in 0..map[0].len() {
@@ -35,17 +35,34 @@ pub fn part_one(input: &str) -> Option<u32> {
             }
         }
     }
-    let mut dist: u32 = 0;
+    extend_space(&mut galaxies, map, 2);
+    let mut dist: u64 = 0;
     for i in 0..galaxies.len() {
         for j in i + 1..galaxies.len() {
-            dist += (galaxies[i].0).abs_diff(galaxies[j].0) as u32 + (galaxies[i].1).abs_diff(galaxies[j].1) as u32;
+            dist += (galaxies[i].0).abs_diff(galaxies[j].0) as u64 + (galaxies[i].1).abs_diff(galaxies[j].1) as u64;
         }
     }
     Some(dist)
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    let map: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
+    let mut galaxies: Vec<(usize, usize)> = Vec::new();
+    for i in 0..map.len() {
+        for j in 0..map[0].len() {
+            if map[i][j] == '#' {
+                galaxies.push((i, j));
+            }
+        }
+    }
+    extend_space(&mut galaxies, map, 1000000);
+    let mut dist: u64 = 0;
+    for i in 0..galaxies.len() {
+        for j in i + 1..galaxies.len() {
+            dist += (galaxies[i].0).abs_diff(galaxies[j].0) as u64 + (galaxies[i].1).abs_diff(galaxies[j].1) as u64;
+        }
+    }
+    Some(dist)
 }
 
 #[cfg(test)]
@@ -61,6 +78,7 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(82000210));
     }
 }
+
