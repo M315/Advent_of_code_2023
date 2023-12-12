@@ -1,10 +1,10 @@
-use std::time::Instant;
+use std::collections::HashMap;
 
 advent_of_code::solution!(12);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Spring {
-    data: String,
+    data: Vec<char>,
     groups: Vec<usize>,
 }
 
@@ -12,13 +12,15 @@ impl Spring {
     fn new(input: &str) -> Self {
         let (data, groups) = input.split_once(" ").unwrap();
         Spring {
-            data: data.to_string(),
-            groups: groups.split(",").map(|n| n.parse::<usize>().unwrap()).collect(),
+            data: data.chars().collect(),
+            groups: groups.split(",").map(|n| n.parse::<usize>().unwrap()).collect::<Vec<usize>>().into_iter().rev().collect(),
         }
     }
 
     fn extend(&self, n: usize) -> Self {
-        let mut new_data: String = (self.data.to_string() + "?").repeat(n);
+        let mut new_data: Vec<char> = self.data.to_vec();
+        new_data.push('?');
+        new_data = new_data.repeat(n);
         new_data.pop();
         Self {
             data: new_data,
@@ -26,55 +28,96 @@ impl Spring {
         }
     }
 
-    fn valid(&self) -> bool {
-        let broken: Vec<&str> = self.data.split(".").filter(|&s| !s.is_empty()).collect();
-        if broken.len() != self.groups.len() { return false; }
-        broken.into_iter()
-            .zip(self.groups.iter())
-            .fold(true, |acc, (broken, &length)| acc && broken.len() == length)
-    }
-
-    fn prune(&self) -> bool {
-        let maybe_broken: Vec<&str> = self.data.split(".")
-            .filter(|&s| !s.is_empty())
-            .collect();
-        if maybe_broken.iter().filter(|&s| !s.chars().all(|c| c == '?')).count() > self.groups.len() { return true; }
-        let mut result: bool = false;
-        if self.groups.len() > maybe_broken.len() + self.data.chars().filter(|&c| c == '?').count() { return true; }
-        for (s, &length) in maybe_broken.into_iter().zip(self.groups.iter()) {
-            if s.chars().all(|c| c == '?') { break; }
-            //if *s.as_bytes().first().unwrap() == b'?' { break; }
-            result |= s.len() < length || (s.len() > length && s.chars().take(length + 1).all(|c| c == '#'));
-            if s.chars().any(|c| c == '?') { break; }
-        }
-        //println!("{} {:?}", result, self);
-        result
-    }
-
-    fn ways(&self, memo: &mut Vec<String>) -> u64 {
-        match self.data.find('?') {
-            None => {
-                if self.valid() {
-                    //println!("{:?}", self);
-                    memo.push(self.data.to_string());
-                    1
-                } else {
-                    0
-                }
-            },
-            Some(pos) => {
-                if self.prune() { return 0; }
-                let mut new_data: String = self.data.to_string();
-
-                new_data.replace_range(pos..pos + 1, ".");
-                let fine: u64 = Self { data: new_data.to_string(), groups: self.groups.to_vec() }.ways(memo);
-
-                new_data.replace_range(pos..pos + 1, "#");
-                let broken: u64 = Self { data: new_data.to_string(), groups: self.groups.to_vec() }.ways(memo);
-
-                fine + broken
+    fn valid(&self, pos: usize, strike: usize) -> Option<u64> {
+        // No more groups
+        if self.groups.len() == 0 {
+            if self.data[pos..].iter().all(|&c| c == '.' || c == '?') {
+                return Some(1);
+            } else {
+                return Some(0);
             }
         }
+
+        // End of string
+        if pos == self.data.len() {
+            return match self.groups.len() {
+                0 => Some(1),
+                _ => {
+                    if self.groups.len() == 1 && self.groups[0] == strike {
+                        return Some(1);
+                    } else {
+                        return Some(0);
+                    }
+                },
+            };
+        }
+
+        // No more ?
+        if !self.data[pos..].iter().any(|&c| c == '?') {
+            let group_slice = self.data[pos - strike..].iter().collect::<String>();
+            let broken: Vec<&str> = group_slice.split(".").filter(|&s| !s.is_empty()).collect();
+            if broken.len() != self.groups.len() { return Some(0); }
+            let condition = broken.into_iter()
+                .zip(self.groups.iter().rev())
+                .fold(true, |acc, (broken, &length)| acc && broken.len() == length);
+            if condition {
+                return Some(1);
+            } else {
+                return Some(0);
+            }
+        }
+
+        None
+    }
+
+    // Need better pruning
+    fn prune(&self, pos: usize, strike: usize) -> bool {
+        if strike > *self.groups.last().unwrap() { return true; }
+        false
+    }
+
+    fn ways(&self, pos: usize, strike: usize, memo: &mut HashMap<(String, Vec<usize>, usize), u64>) -> u64 {
+        // Valid
+        match self.valid(pos, strike) {
+            Some(result) => { return result; },
+            None => {},
+        }
+
+        // Seen
+        if memo.contains_key(&(self.data[pos..].iter().collect::<String>(), self.groups.to_vec(), strike)) {
+            return *memo.get(&(self.data[pos..].iter().collect::<String>(), self.groups.to_vec(), strike)).unwrap();
+        }
+
+        // Prune
+        if self.prune(pos, strike) { return 0; }
+
+        let combinations = match self.data[pos] {
+            '#' => { self.ways(pos + 1, strike + 1, memo) },
+            '.' => {
+                if strike != 0 && strike != *self.groups.last().unwrap() { return 0; }
+                match strike {
+                    0 => self.ways(pos + 1, 0, memo),
+                    _ => {
+                        let updated_groups = self.groups[..self.groups.len() - 1].to_vec();
+                        (Self{ data: self.data.to_vec(), groups: updated_groups }).ways(pos + 1, 0, memo)
+                    }
+                }
+            },
+            '?' => {
+                let mut updated_data = self.data.to_vec();
+                updated_data[pos] = '#';
+                let broken: u64 = (Self{ data: updated_data.to_vec(), groups: self.groups.to_vec() }).ways(pos + 1, strike + 1, memo);
+
+                updated_data[pos] = '.';
+                let save: u64 = (Self{ data: updated_data, groups: self.groups.to_vec() }).ways(pos, strike, memo);
+
+                save + broken
+            },
+            _ => panic!("Unexpected character"),
+        };
+
+        memo.insert((self.data[pos..].iter().collect::<String>(), self.groups.to_vec(), strike), combinations);
+        combinations
     }
 }
 
@@ -85,87 +128,16 @@ fn parse(input: &str) -> Vec<Spring> {
 }
 
 pub fn part_one(input: &str) -> Option<u64> {
-    parse(input).into_iter().fold(Some(0), |acc, spring| Some(acc.unwrap() + spring.ways(&mut Vec::new())))
+    parse(input)
+        .into_iter()
+        .fold(Some(0), |acc, spring| Some(acc.unwrap() + spring.ways(0, 0,&mut HashMap::new())))
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
-    //let mut memo: Vec<String> = Vec::new();
-    //let mut spring: Spring = parse(input)[5].clone();
-    //let ans = spring.ways(&mut memo);
-    //println!("Original");
-    //for sol in memo {
-    //    println!("{:?}", sol);
-    //}
-    //println!("{}", ans);
-    //println!("Added");
-    //let mut memo_2: Vec<String> = Vec::new();
-    //spring.data.insert(0, '?');
-    //let ans = spring.ways(&mut memo_2);
-    //for sol in memo_2 {
-    //    println!("{:?}", sol);
-    //}
-    //println!("{}", ans);
-    //println!("Added_2");
-    //let mut memo_2: Vec<String> = Vec::new();
-    //spring.data.push('?');
-    //let ans = spring.ways(&mut memo_2);
-    //for sol in memo_2 {
-    //    println!("{:?}", sol);
-    //}
-    //println!("{}", ans);
-    //Some(ans)
-    parse(input).iter_mut().enumerate().skip(27).take(1)
-        .fold(Some(0), |acc, (i, spring)| {
-            let now = Instant::now();
-            let mut original_ways: Vec<String> = Vec::new();
-            spring.ways(&mut original_ways);
-
-            print!("{}, {:?} ", i, (Spring{ data: spring.data.to_string() + "?" + spring.data.as_str(), groups: spring.groups.repeat(2)}).ways(&mut Vec::new()));
-
-            let mut back_ways: Vec<String> = Vec::new();
-            spring.data.push('?');
-            spring.ways(&mut back_ways);
-
-            let mut back_combinations: u64 = 0;
-            for way in &original_ways {
-                let mut valid_combinations: u64 = 0;
-                for back_way in &back_ways {
-                    if (Spring { data: back_way.to_owned() + way, groups: spring.groups.repeat(2) }).valid() {
-                        valid_combinations += 1;
-                    }
-                }
-                back_combinations += valid_combinations.pow(4);
-            }
-            print!("{} ", back_combinations);
-
-
-            let mut forward_ways: Vec<String> = Vec::new();
-            spring.data.pop();
-            spring.data.insert(0, '?');
-            spring.ways(&mut forward_ways);
-
-            let mut forward_combinations: u64 = 0;
-            for way in &original_ways {
-                let mut valid_combinations: u64 = 0;
-                for forward_way in &forward_ways {
-                    if (Spring { data: way.to_owned() + forward_way, groups: spring.groups.repeat(2) }).valid() {
-                        valid_combinations += 1;
-                    }
-                }
-                forward_combinations += valid_combinations.pow(4);
-            }
-            print!("{}", forward_combinations);
-            println!(" -> {:?} {} {} {}", spring, original_ways.len(), back_ways.len(), forward_ways.len());
-            println!("{:?}", now.elapsed());
-
-            if forward_combinations as usize == original_ways.len() * forward_ways.len().pow(4)
-            || back_combinations as usize == original_ways.len() * back_ways.len().pow(4) {
-                println!("THIS ONE\n");
-            }
-
-
-            Some(acc.unwrap() + back_combinations.max(forward_combinations))
-    })
+    parse(input).iter_mut() 
+        .fold(Some(0), |acc, spring| {
+            Some(acc.unwrap() + spring.extend(5).ways(0, 0, &mut HashMap::new()))//back_combinations.max(forward_combinations))
+        })
 }
 
 #[cfg(test)]
