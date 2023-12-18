@@ -81,52 +81,99 @@ impl State {
     }
 }
 
-fn energize(state: State, grid: &Vec<Vec<char>>, energized: &mut Vec<Vec<bool>>, seen: &mut HashSet<State>) {
-    //println!("{:?}, {:?}", state, seen.len());
-    if seen.contains(&state) { return; }
-    seen.insert(state.clone());
-    energized[state.pos.0][state.pos.1] = true;
+fn energize(start: State, grid: &Vec<Vec<char>>) -> Vec<Vec<bool>> {
+    let mut energized: Vec<Vec<bool>> = vec![vec![false; grid.first().unwrap().len()]; grid.len()];
+    let mut seen: HashSet<State> = HashSet::new();
+    let mut q: Vec<State> = vec![start];
 
-    match grid[state.pos.0][state.pos.1] {
-        '.' => {
-            if let Some(next_state) = state.next_state((grid.len(), grid[0].len())) {
-                energize(next_state, grid, energized, seen);
-            }
-        },
-        '\\' => {
-            if let Some(next_state) = state.reflect('\\', (grid.len(), grid[0].len())) {
-                energize(next_state, grid, energized, seen);
-            }
-        },
-        '/' => {
-            if let Some(next_state) = state.reflect('/', (grid.len(), grid[0].len())) {
-                energize(next_state, grid, energized, seen);
-            }
-        },
-        '-' => {
-            let next_steps: (Option<State>, Option<State>) = state.bifurcate('-', (grid.len(), grid[0].len()));
-            if let Some(next_state) = next_steps.0 { energize(next_state, grid, energized, seen); }
-            if let Some(next_state) = next_steps.1 { energize(next_state, grid, energized, seen); }
-        },
-        '|' => {
-            let next_steps: (Option<State>, Option<State>) = state.bifurcate('|', (grid.len(), grid[0].len()));
-            if let Some(next_state) = next_steps.0 { energize(next_state, grid, energized, seen); }
-            if let Some(next_state) = next_steps.1 { energize(next_state, grid, energized, seen); }
-        },
-        _ => panic!("Invalid character"),
+    while let Some(state) = q.pop() {
+        energized[state.pos.0][state.pos.1] = true;
+        match grid[state.pos.0][state.pos.1] {
+            '.' => {
+                if let Some(next_state) = state.next_state((grid.len(), grid[0].len())) {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+            },
+            '\\' => {
+                if let Some(next_state) = state.reflect('\\', (grid.len(), grid[0].len())) {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+            },
+            '/' => {
+                if let Some(next_state) = state.reflect('/', (grid.len(), grid[0].len())) {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+            },
+            '-' => {
+                let next_steps: (Option<State>, Option<State>) = state.bifurcate('-', (grid.len(), grid[0].len()));
+                if let Some(next_state) = next_steps.0 {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+                if let Some(next_state) = next_steps.1 {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+            },
+            '|' => {
+                let next_steps: (Option<State>, Option<State>) = state.bifurcate('|', (grid.len(), grid[0].len()));
+                if let Some(next_state) = next_steps.0 {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+                if let Some(next_state) = next_steps.1 {
+                    if !seen.contains(&next_state) {
+                        seen.insert(next_state);
+                        q.push(next_state);
+                    }
+                }
+            },
+            _ => panic!("Invalid character"),
+        }
     }
+    energized
+}
+
+fn count_energy(energized: Vec<Vec<bool>>) -> u32 {
+    energized.into_iter()
+        .fold(0, |acc, row| acc + row.iter().filter(|&x| *x).count() as u32)
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
     let grid: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
-    let mut energized: Vec<Vec<bool>> = vec![vec![false; grid.first().unwrap().len()]; grid.len()];
-    energize(State{ pos: (0, 0), dir: Direction::Right }, &grid, &mut energized, &mut HashSet::new());
-    energized.into_iter()
-        .fold(None, |acc, row| Some(acc.unwrap_or(0) + row.iter().filter(|&x| *x).count() as u32))
+    let energized: Vec<Vec<bool>> = energize( State{ pos: (0, 0), dir: Direction::Right }, &grid);
+    Some(count_energy(energized))
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u32> {
+    let grid: Vec<Vec<char>> = input.lines().map(|line| line.chars().collect()).collect();
+    let mut ans: u32 = 0;
+    // Left & Right
+    for i in 0..grid.len() {
+        ans = ans.max(count_energy(energize( State{ pos: (i, 0), dir: Direction::Right }, &grid)));
+        ans = ans.max(count_energy(energize( State{ pos: (i, grid[i].len() - 1), dir: Direction::Left }, &grid)));
+    }
+    // Up & Down
+    for j in 0..grid[0].len() {
+        ans = ans.max(count_energy(energize( State{ pos: (0, j), dir: Direction::Down }, &grid)));
+        ans = ans.max(count_energy(energize( State{ pos: (grid.len() - 1, j), dir: Direction::Up }, &grid)));
+    }
+    Some(ans)
 }
 
 #[cfg(test)]
@@ -142,6 +189,6 @@ mod tests {
     #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(51));
     }
 }
