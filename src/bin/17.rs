@@ -54,24 +54,32 @@ impl State {
                 self.add_state(Direction::Right, grid, &mut new_states);
             },
             Some(Direction::Left) => {
-                self.add_state(Direction::Down, grid, &mut new_states);
-                self.add_state(Direction::Up, grid, &mut new_states);
-                if self.step_strike < 3 { self.add_state(Direction::Left, grid, &mut new_states); }
+                if self.step_strike >= 4 {
+                    self.add_state(Direction::Down, grid, &mut new_states);
+                    self.add_state(Direction::Up, grid, &mut new_states);
+                }
+                if self.step_strike < 10 { self.add_state(Direction::Left, grid, &mut new_states); }
             },
             Some(Direction::Right) => {
-                self.add_state(Direction::Down, grid, &mut new_states);
-                self.add_state(Direction::Up, grid, &mut new_states);
-                if self.step_strike < 3 { self.add_state(Direction::Right, grid, &mut new_states); }
+                if self.step_strike >= 4 {
+                    self.add_state(Direction::Down, grid, &mut new_states);
+                    self.add_state(Direction::Up, grid, &mut new_states);
+                }
+                if self.step_strike < 10 { self.add_state(Direction::Right, grid, &mut new_states); }
             },
             Some(Direction::Up) => {
-                self.add_state(Direction::Right, grid, &mut new_states);
-                self.add_state(Direction::Left, grid, &mut new_states);
-                if self.step_strike < 3 { self.add_state(Direction::Up, grid, &mut new_states); }
+                if self.step_strike >= 4 {
+                    self.add_state(Direction::Right, grid, &mut new_states);
+                    self.add_state(Direction::Left, grid, &mut new_states);
+                }
+                if self.step_strike < 10 { self.add_state(Direction::Up, grid, &mut new_states); }
             },
             Some(Direction::Down) => {
-                self.add_state(Direction::Right, grid, &mut new_states);
-                self.add_state(Direction::Left, grid, &mut new_states);
-                if self.step_strike < 3 { self.add_state(Direction::Down, grid, &mut new_states); }
+                if self.step_strike >= 4 {
+                    self.add_state(Direction::Right, grid, &mut new_states);
+                    self.add_state(Direction::Left, grid, &mut new_states);
+                }
+                if self.step_strike < 10 { self.add_state(Direction::Down, grid, &mut new_states); }
             },
         }
         new_states
@@ -120,12 +128,6 @@ impl State {
             Some(dir) => dir.as_usize(),
         };
         if dist[self.pos.0][self.pos.1][k][self.step_strike as usize] <= self.cost { return false; }
-        //for step in self.step_strike as usize..4 {
-        //    dist[self.pos.0][self.pos.1][k][step] = dist[self.pos.0][self.pos.1][k][step].min(self.cost);
-        //}
-        //for (k, t) in (0..5).zip(0..4) {
-        //    dist[self.pos.0][self.pos.1][k][t] = dist[self.pos.0][self.pos.1][k][t].min(self.cost + self.step_strike * 9);
-        //}
         dist[self.pos.0][self.pos.1][k][self.step_strike as usize] = dist[self.pos.0][self.pos.1][k][self.step_strike as usize].min(self.cost);
         true
     }
@@ -141,7 +143,7 @@ impl State {
 
 
 fn dijkstra(start: State, goal: (usize, usize), grid: &Vec<Vec<u32>>) -> Option<u32> {
-    let mut dist: Vec<Vec<Vec<Vec<u32>>>> = vec![vec![vec![vec![u32::MAX; 4]; 5]; grid[0].len()]; grid.len()];
+    let mut dist: Vec<Vec<Vec<Vec<u32>>>> = vec![vec![vec![vec![u32::MAX; 11]; 5]; grid[0].len()]; grid.len()];
     let mut q: BinaryHeap<State> = BinaryHeap::new();
     
     start.update_dist(&mut dist);
@@ -149,7 +151,6 @@ fn dijkstra(start: State, goal: (usize, usize), grid: &Vec<Vec<u32>>) -> Option<
 
     while let Some(state) = q.pop() {
         if state.pos == goal {
-            //for (state, cost) in known.into_iter() {println!("{:?} {:?}", state, cost);}
             return Some(state.cost);
         }
         if !state.valid(&dist) { continue; }
@@ -163,13 +164,14 @@ fn dijkstra(start: State, goal: (usize, usize), grid: &Vec<Vec<u32>>) -> Option<
     None
 }
 
-pub fn part_one(input: &str) -> Option<u32> {
-    let grid: Vec<Vec<u32>> = input.lines().map(|line| line.chars().map(|c| c.to_digit(10).unwrap()).collect()).collect();
-    dijkstra(State{ cost: 0, pos: (0, 0), dir: None, step_strike: 0}, (grid.first().unwrap().len() - 1, grid.len() - 1), &grid)
+
+pub fn part_one(_input: &str) -> Option<u32> {
+    None
 }
 
-pub fn part_two(_input: &str) -> Option<u32> {
-    None
+pub fn part_two(input: &str) -> Option<u32> {
+    let grid: Vec<Vec<u32>> = input.lines().map(|line| line.chars().map(|c| c.to_digit(10).unwrap()).collect()).collect();
+    dijkstra(State{ cost: 0, pos: (0, 0), dir: None, step_strike: 0}, (grid.first().unwrap().len() - 1, grid.len() - 1), &grid)
 }
 
 #[cfg(test)]
@@ -177,14 +179,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_part_one() {
-        let result = part_one(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, Some(102));
-    }
-
-    #[test]
     fn test_part_two() {
         let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+        assert_eq!(result, Some(94));
     }
 }
