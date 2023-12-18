@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 advent_of_code::solution!(10);
 
 enum Dir {
