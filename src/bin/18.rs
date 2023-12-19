@@ -1,136 +1,240 @@
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+
 advent_of_code::solution!(18);
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-enum Direction {
-    Right,
-    Left,
-    Up,
-    Down,
+enum Orient {
+    Horizontal,
+    Vertical,
 }
 
-impl Direction {
-    fn from(input: &str) -> Self {
-        match input {
-            "R" => Direction::Right,
-            "L" => Direction::Left,
-            "U" => Direction::Up,
-            "D" => Direction::Down,
-            _ => panic!("Invalid direction"),
+impl Ord for Orient {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Orient::Horizontal, Orient::Horizontal) => Ordering::Equal,
+            (Orient::Horizontal, Orient::Vertical) => Ordering::Less,
+            (Orient::Vertical, Orient::Horizontal) => Ordering::Greater,
+            (Orient::Vertical, Orient::Vertical) => Ordering::Equal,
         }
     }
 }
 
+impl PartialOrd for Orient {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 struct Step {
-    dir: Direction,
-    steps: usize,
-    color: String,
+    start: (i64, i64),
+    end: (i64, i64),
+    orientation: Orient,
+}
+
+impl Ord for Step {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.start.cmp(&self.start)
+            .then_with(|| other.orientation.cmp(&self.orientation))
+            .then_with(|| self.end.cmp(&other.end))
+    }
+}
+
+impl PartialOrd for Step {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Step {
-    fn from(input: &str) -> Self {
+    fn from(input: &str, pos: &mut (i64, i64)) -> Self {
         let parts: Vec<&str> = input.split(" ").collect();
-        Self {
-            dir: Direction::from(parts[0]),
-            steps: parts[1].parse().unwrap(),
-            color: parts[2].to_string(),
+        let steps: i64 = parts[1].parse().unwrap();
+        let mut start: (i64, i64) = pos.clone();
+        match parts[0] {
+            "D" => { pos.0 += steps; },
+            "U" => { pos.0 -= steps; start.0 -= steps; },
+            "R" => { pos.1 += steps; },
+            "L" => { pos.1 -= steps; start.1 -= steps; },
+            _ => panic!("Invalid direction"),
         }
+        match parts[0] {
+            "R" | "L" => Self { start, orientation: Orient::Horizontal, end: (start.0, start.1 + steps) },
+            "U" | "D" => Self { start, orientation: Orient::Vertical, end: (start.0 + steps, start.1) },
+            _ => panic!("Invalid orientation"),
+        }
+    }
+
+    fn length(&self) -> i64 {
+        self.end.1 - self.start.1
+    }
+
+    fn height(&self) -> i64 {
+        self.end.0 - self.start.0
+    }
+
+    fn intersect(&self, other: &Self) -> bool {
+        if self.start.0 != other.start.0 { return false; }
+        if self.start.1 > other.start.1 { return other.intersect(self); }
+        if self.end.1 < other.start.1 { return false; }
+        true
+    }
+
+    fn extend(&mut self, other: &Self) {
+        self.start.1 = self.start.1.min(other.start.1);
+        self.end.1 = self.end.1.max(other.end.1);
+    }
+
+    fn shrink_right(&self, other: &Self) -> Self {
+        let mut shrinked: Step = other.clone();
+        if other.end.1 < self.end.1 {
+            shrinked.start.1 = other.end.1;
+            shrinked.end.1 = self.end.1;
+        } else {
+            shrinked.start.1 = self.end.1;
+        }
+        shrinked
+    }
+
+    fn shrink_left(&self, other: &Self) -> Self {
+        let mut shrinked: Step = self.clone();
+        shrinked.end.1 = other.start.1;
+        shrinked
+    }
+
+    fn diff_right(&self, other: &Self) -> Self {
+        let mut difference = self.clone();
+        difference.end.1 = other.start.1;
+        difference
+    }
+
+    fn diff_left(&self, other: &Self) -> Self {
+        let mut difference = self.clone();
+        difference.start.1 = other.end.1;
+        difference
     }
 }
 
-fn dig(start: (usize, usize), plan: &Vec<Step>, grid: &mut Vec<Vec<bool>>) {
-    grid[start.0][start.1] = true;
-    let mut pos: (usize, usize) = start;
+fn size_hole(plan: Vec<Step>) -> u64 {
+    let mut vertical_walls: HashMap<(i64, i64), Step> = HashMap::new();
+    let mut q: BinaryHeap<Step> = BinaryHeap::new();
+    let mut cubes: u64 = 0;
+    let mut stripes: HashSet<Step> = HashSet::new();
+
     for step in plan {
-        for _ in 0..step.steps {
-            match step.dir {
-                Direction::Up => { pos.0 -= 1; }
-                Direction::Down => { pos.0 += 1; }
-                Direction::Left => { pos.1 -= 1; }
-                Direction::Right => { pos.1 += 1; }
-            };
-            grid[pos.0][pos.1] = true;
-        }
-    }
-}
-
-fn out_size(grid: &Vec<Vec<bool>>) -> u32 {
-    let mut seen: Vec<Vec<bool>> = vec![vec![false; grid[0].len()]; grid.len()];
-    let mut q: Vec<(usize, usize)> = vec![(0, 0)];
-    let mut count = 0;
-    seen[0][0] = true;
-
-    while let Some((i, j)) = q.pop() {
-        count += 1;
-        if i > 0 && !grid[i - 1][j] && !seen[i - 1][j] {
-            seen[i - 1][j] = true;
-            q.push((i - 1, j));
-        }
-        if i < grid.len() - 1 && !grid[i + 1][j] && !seen[i + 1][j] {
-            seen[i + 1][j] = true;
-            q.push((i + 1, j));
-        }
-        if j > 0 && !grid[i][j - 1] && !seen[i][j - 1] {
-            seen[i][j - 1] = true;
-            q.push((i, j - 1));
-        }
-        if j < grid[0].len() - 1 && !grid[i][j + 1] && !seen[i][j + 1] {
-            seen[i][j + 1] = true;
-            q.push((i, j + 1));
+        match step.orientation {
+            Orient::Horizontal => { q.push(step); },
+            Orient::Vertical => { vertical_walls.insert(step.start, step); },
         }
     }
 
-    for row in &seen {
-        println!("{:?}", row.iter().map(|b| match b {
-            true => '#',
-            false => '.',
-        }).collect::<String>());
-    }
-    
-    count
-}
 
-pub fn part_one(input: &str) -> Option<u32> {
-    let plan: Vec<Step> = input.lines().map(|line| Step::from(line)).collect();
-    // Horizontal limits
-    let mut pos: i32 = 0;
-    let h_limits: (i32, i32) = plan.iter()
-        .fold((0, 0), |acc, state| {
-            match state.dir {
-                Direction::Left => { pos -= state.steps as i32; },
-                Direction::Right => { pos += state.steps as i32; },
-                _ => {},
-            };
-            (acc.0.min(pos), acc.1.max(pos))
+    while !q.is_empty() {
+        println!("# {}", cubes);
+        let mut step: Step = q.pop().unwrap();
+        println!("{:?}", step);
+        while let Some(modifier) = q.pop() {
+            if !step.intersect(&modifier) { q.push(modifier); break; }
+            println!("\t{:?}", modifier);
+            if modifier.start.1 == step.end.1 {
+                step.extend(&modifier);
+            } else if step.end.1 > modifier.end.1 {
+                let left = step.shrink_left(&modifier);
+                let right = step.shrink_right(&modifier);
+                if left.length() > 0 {
+                    //cubes += (step.length() - left.length()) as u64;
+                    stripes.insert(step.diff_left(&left));
+                    q.push(right);
+                    step = left;
+                    break;
+                } 
+                //cubes += (step.length() - right.length()) as u64;
+                stripes.insert(step.diff_right(&right));
+                step = right;
+            } else {
+                let left = step.shrink_left(&modifier);
+                let right = step.shrink_right(&modifier);
+                println!("\t -> {:?} {:?}", left, right);
+                if left.length() > 0 && vertical_walls.contains_key(&left.start) && vertical_walls.contains_key(&left.end) {
+                    //cubes += (step.length() - left.length()) as u64;
+                    stripes.insert(step.diff_left(&left));
+                    step = left;
+                } else {
+                    //cubes += (step.length() - right.length()) as u64;
+                    stripes.insert(step.diff_right(&right));
+                    step = right;
+                }
+            }
+        }
+        println!("\t# {}", cubes);
+
+        if step.length() == 0 { continue; }
+
+        let left: Step = vertical_walls.get(&step.start).unwrap().clone();
+        let right: Step = vertical_walls.get(&(step.start.0, &step.start.1 + step.length())).unwrap().clone();
+        let height: i64 = (left.height()).min(right.height());
+
+        cubes += (step.length() as u64 + 1) * (height as u64);
+
+        if right.height() > left.height() {
+            vertical_walls.insert(
+                (step.end.0 + height, step.end.1),
+                Step {
+                    start: (step.end.0 + height, step.end.1),
+                    end: (right.end.0, right.end.1),
+                    orientation: Orient::Vertical,
+                }
+            );
+        }
+
+        if left.height() > right.height() {
+            vertical_walls.insert(
+                (step.start.0 + height, step.start.1),
+                Step {
+                    start: (step.start.0 + height, step.start.1),
+                    end: (left.end.0, left.end.1),
+                    orientation: Orient::Vertical,
+                }
+            );
+        }
+
+        q.push(Step {
+            start: (step.start.0 + height, step.start.1),
+            end: (step.end.0 + height, step.end.1),
+            orientation: Orient::Horizontal,
         });
-    println!("{:?}", h_limits);
-
-    // Vertical limits
-    let mut pos: i32 = 0;
-    let v_limits: (i32, i32) = plan.iter()
-        .fold((0, 0), |acc, state| {
-            match state.dir {
-                Direction::Up => { pos -= state.steps as i32; },
-                Direction::Down => { pos += state.steps as i32; },
-                _ => {},
-            };
-            (acc.0.min(pos), acc.1.max(pos))
-        });
-    println!("{:?}", v_limits);
-
-    let mut grid: Vec<Vec<bool>> = vec![vec![false; (h_limits.1 - h_limits.0.min(0) + 3) as usize]; (v_limits.1 - v_limits.0.min(0) + 3) as usize];
-    dig(((-v_limits.0).max(0) as usize + 1, (-h_limits.0).max(0) as usize + 1), &plan, &mut grid);
-
-    for row in &grid {
-        println!("{:?}", row.iter().map(|b| match b {
-            true => '#',
-            false => '.',
-        }).collect::<String>());
     }
-
-    Some((grid.len() * grid[0].len()) as u32 - out_size(&grid))
+    let mut s = stripes.into_iter().collect::<Vec<Step>>();
+    s.sort();
+    while !s.is_empty() {
+        let mut stripe = s.pop().unwrap();
+        println!("{:?}", stripe);
+        while let Some(strp) = s.pop() {
+            if stripe.intersect(&strp) {
+                println!("\t{:?}", strp);
+                stripe.extend(&strp);
+            } else {
+                s.push(strp);
+                break;
+            }
+        }
+        println!("-> {:?}", stripe);
+        cubes += stripe.length() as u64;
+    }
+    cubes
 }
 
-pub fn part_two(input: &str) -> Option<u32> {
+pub fn part_one(input: &str) -> Option<u64> {
+    let mut pos: (i64, i64) = (0, 0);
+    let plan: Vec<Step> = input.lines()
+        .map(|line| {
+            Step::from(line, &mut pos)
+        }).collect();
+    Some(size_hole(plan))
+}
+
+pub fn part_two(input: &str) -> Option<u64> {
     None
 }
 
