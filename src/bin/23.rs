@@ -60,42 +60,104 @@ impl Path {
 
         valid_path
     }
+}
 
-    fn length(&self) -> usize {
-        self.steps.iter()
-            .fold(0, |count, row| count + row.iter().filter(|&b| *b).count())
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct Edge {
+    node: usize,
+    length: usize,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Node {
+    pos: (usize, usize),
+    neighbours: Vec<Edge>,
+}
+
+impl Node {
+    fn new(pos: (usize, usize)) -> Self {
+        Self { pos, neighbours: Vec::new() }
     }
 }
 
-fn longest_bfs(start: (usize, usize), grid: &Vec<Vec<char>>) -> Option<Path> {
-    let mut q: Vec<Path> = vec![Path::new(start, grid)];
-    let mut longest_path: Option<Path> = None;
-    let mut longest: Vec<Vec<usize>> = vec![vec![0; grid[0].len()]; grid.len()];
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct PathGraph {
+    node: usize,
+    length: usize,
+    visited: Vec<bool>,
+}
+
+fn find_neighbours(node: &mut Node, nodes: &Vec<Node>, grid: &Vec<Vec<char>>) {
+    let mut q: Vec<Path> = vec![Path::new(node.pos, grid)];
 
     while let Some(path) = q.pop() {
-        if path.pos == (grid.len() - 1, grid[0].len() - 2) {
-            match longest_path {
-                None => longest_path = Some(path.clone()),
-                Some(ref long) => { if long.length < path.length { longest_path = Some(path); } }
-            }
-            continue;
-        }
         for next_pos in path.next_positions(grid) {
-            if longest[next_pos.pos.0][next_pos.pos.1] < next_pos.length {
-                longest[next_pos.pos.0][next_pos.pos.1] = next_pos.length;
-                q.push(next_pos);
+            let mut found: bool = false;
+            for (i, neighbour) in nodes.iter().enumerate() {
+                if next_pos.pos == neighbour.pos && next_pos.pos != node.pos {
+                    node.neighbours.push(Edge { node: i, length: next_pos.length });
+                    found = true;
+                }
+            }
+            if !found { q.push(next_pos); }
+        }
+    }
+}
+
+fn fold(grid: &Vec<Vec<char>>) -> Vec<Node> {
+    // Find intersection Points
+    let mut nodes: Vec<Node> = vec![Node::new((0, 1))];
+    for i in 1..grid.len() - 1 {
+        for j in 1..grid[0].len() - 1 {
+            if grid[i][j] != '#' && vec![grid[i - 1][j], grid[i + 1][j], grid[i][j - 1], grid[i][j + 1]].iter().filter(|&c| *c != '#').count() > 2 {
+                nodes.push(Node::new((i, j)));
             }
         }
     }
+    nodes.push(Node::new((grid.len() - 1, grid[0].len() - 2)));
 
-    longest_path
+    // Fill neighbours
+    let nodes_copy = nodes.clone();
+    for node in nodes.iter_mut() {
+        find_neighbours(node, &nodes_copy, &grid);
+    }
+
+    nodes
+}
+
+fn longest_path(nodes: &Vec<Node>) -> Option<u32> {
+    let mut longest: Option<u32> = None;
+    let mut q: Vec<PathGraph> = vec![PathGraph { node: 0, length: 0, visited: vec![false; nodes.len()] }];
+    q[0].visited[0] = true;
+
+    while let Some(path) = q.pop() {
+        if path.node == nodes.len() - 1 {
+            longest = match longest {
+                None => Some(path.length as u32),
+                Some(len) => Some(len.max(path.length as u32)),
+            };
+        }
+        for &edge in nodes[path.node].neighbours.iter() {
+            if path.visited[edge.node] { continue; }
+            let mut next_step =  PathGraph {
+                length: path.length + edge.length,
+                node: edge.node,
+                visited: path.visited.clone()
+            };
+            next_step.visited[edge.node] = true;
+            q.push(next_step);
+        }
+    }
+
+    longest
 }
 
 pub fn part_one(input: &str) -> Option<u32> {
     let grid: Vec<Vec<char>> = input.lines()
         .map(|line| line.chars().collect())
         .collect();
-    Some(longest_bfs((0, 1), &grid).unwrap().length() as u32 - 1)
+    let nodes = fold(&grid);
+    Some(longest_path(&nodes).unwrap())
 }
 
 pub fn part_two(input: &str) -> Option<u32> {
@@ -107,7 +169,8 @@ pub fn part_two(input: &str) -> Option<u32> {
             })
             .collect())
         .collect();
-    Some(longest_bfs((0, 1), &grid).unwrap().length() as u32 - 1)
+    let nodes = fold(&grid);
+    Some(longest_path(&nodes).unwrap())
 }
 
 #[cfg(test)]
